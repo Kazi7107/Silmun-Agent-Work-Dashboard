@@ -359,21 +359,36 @@
     }).filter(Boolean);
   }
 
+  // Launch status only says At risk when the launch date is actually in danger.
+  // Small slips are still reported honestly, just without the alarm.
   function overall() {
     const ms = state.data.milestones || [];
     const missed = ms.filter((m) => !isDone(m.status) && m.date && diff(m.date) < 0);
-    const items = blockers().flatMap((g) => g.items);
-    const late = items.filter((x) => x.kind === "late").length;
-    const stuck = items.length - late;
-    const overdueAsks = leadItems().filter((d) => d.date && diff(d.date) < 0).length;
     const next = ms.filter((m) => !isDone(m.status)).sort((x, y) => (x.date || "9").localeCompare(y.date || "9"))[0];
-    if (missed.length) return { cls: "off", label: "Behind", text: `${missed.length} milestone${missed.length > 1 ? "s" : ""} missed. The launch date needs a second look.`, next };
-    if (late || stuck || overdueAsks) {
+    const items = blockers().flatMap((g) => g.items);
+    const lateItems = items.filter((x) => x.kind === "late");
+    const waiting = items.length - lateItems.length;
+    const seriousLate = lateItems.filter((x) => daysLate(x.due) >= 3);
+    const overdueAsks = leadItems().filter((d) => d.date && daysLate(d.date) >= 3);
+    // Something blocked and due within 3 days is about to slip.
+    const aboutToSlip = state.data.tasks.filter((t) => !isDone(t.status) && stuckNow(t) && t.due && diff(t.due) >= 0 && diff(t.due) <= 3 && !leadsOwn(t.owner));
+    const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+    if (missed.length) {
+      return { cls: "off", label: "Off track", text: `${plural(missed.length, "milestone date has", "milestone dates have")} passed without being done. The launch date needs a second look.`, next };
+    }
+    if (seriousLate.length || overdueAsks.length || aboutToSlip.length) {
       const parts = [];
-      if (late) parts.push(`${late} ${late === 1 ? "thing is" : "things are"} late`);
-      if (stuck) parts.push(`${stuck} ${stuck === 1 ? "is" : "are"} stuck`);
-      if (overdueAsks) parts.push(`${overdueAsks} of your decisions ${overdueAsks === 1 ? "is" : "are"} overdue`);
-      return { cls: "risk", label: "At risk", text: `${parts.join(", ").replace(/, ([^,]*)$/, " and $1")}. No milestone has slipped yet.`, next };
+      if (seriousLate.length) parts.push(`${plural(seriousLate.length, "item is", "items are")} 3+ days late`);
+      if (overdueAsks.length) parts.push(`${plural(overdueAsks.length, "of your decisions is", "of your decisions are")} 3+ days overdue`);
+      if (aboutToSlip.length) parts.push(`${plural(aboutToSlip.length, "blocked item is", "blocked items are")} due in the next 3 days`);
+      return { cls: "risk", label: "At risk", text: `${parts.join(", ").replace(/, ([^,]*)$/, " and $1")}. That could push a milestone.`, next };
+    }
+    if (lateItems.length || waiting) {
+      const parts = [];
+      if (lateItems.length) parts.push(`${plural(lateItems.length, "small slip", "small slips")}`);
+      if (waiting) parts.push(`${plural(waiting, "item", "items")} waiting on someone`);
+      return { cls: "on", label: "On track", text: `${parts.join(" and ")}, nothing that threatens a milestone yet. Details in Who to chase.`, next };
     }
     return { cls: "on", label: "On track", text: "Nothing late, nothing stuck. Every milestone is on schedule.", next };
   }
