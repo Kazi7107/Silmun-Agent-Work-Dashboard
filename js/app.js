@@ -431,7 +431,7 @@
 
   /* ---------- Layout per view ---------- */
   const TEAM_ORDER = ["#overview", ".stats-team", "#decide", "#path", "#tasks", "#risks", "#decided"];
-  const EXEC_ORDER = ["#overview", ".stats-exec", "#health", "#blockers", "#decide", "#path", "#risks", "#decided"];
+  const EXEC_ORDER = ["#overview", ".stats-exec", "#health", "#blockers", "#decide", "#path", "#decided"];
   const TEAM_TABS = [["overview", "Overview"], ["decide", "Decide"], ["tasks", "Work"], ["risks", "Risks"]];
   const EXEC_TABS = [["overview", "Overview"], ["health", "On track?"], ["blockers", "Chase"], ["decide", "Needs you"]];
 

@@ -341,7 +341,7 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .stats-exec, .exec-only { display: none; }
 body.exec .stats-exec { display: grid; }
 body.exec .exec-only { display: block; }
-body.exec .stats-team, body.exec #tasks, body.exec .team-only { display: none; }
+body.exec .stats-team, body.exec #tasks, body.exec #risks, body.exec .team-only { display: none; }
 
 .stat-status .stat-n { font-size: 28px; padding-top: 6px; }
 .stat-status.st-on .stat-n { color: var(--done); }
