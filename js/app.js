@@ -341,14 +341,18 @@
       const items = state.data.tasks.filter((t) => t.area === area);
       if (!items.length) return null;
       const open = items.filter((t) => !isDone(t.status));
-      const late = open.filter(isLate).length;
-      const stuck = open.filter((t) => stuckNow(t) && !isLate(t)).length;
+      // Who this area is waiting on: owners of late items, plus whoever stuck items wait on.
+      const firstName = (o) => (o || "Unassigned").split(/,| and |&/)[0].trim();
+      const who = new Set();
+      open.filter(isLate).forEach((t) => who.add(firstName(t.owner)));
+      open.filter((t) => stuckNow(t) && !isLate(t)).forEach((t) => { const w = waitingOn(t).who; if (w) who.add(w); });
       const next = open.filter((t) => t.due && diff(t.due) >= 0).sort(byDue)[0];
-      const status = !open.length ? "done" : late ? "off" : stuck ? "risk" : "on";
+      const status = !open.length ? "done" : who.size ? "blocked" : "on";
+      const names = [...who].map((w) => (w === CEO ? "you" : w));
+      const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0];
       const bits = [];
-      if (late) bits.push(`${late} late`);
-      if (stuck) bits.push(`${stuck} stuck`);
-      if (!late && !stuck && open.length) bits.push("All on schedule");
+      if (who.size) bits.push(`Waiting on ${list}`);
+      if (!who.size && open.length) bits.push("All on schedule");
       if (!open.length) bits.push("Finished");
       if (next) bits.push(`next due ${fmt(next.due, { month: "short", day: "numeric" })}`);
       return { name, status, line: bits.join(" · ") };
@@ -389,7 +393,7 @@
       (o.next ? `<span class="next-up"><span class="mono">Next milestone</span>${esc(o.next.title)} · ${esc(fmt(o.next.date, { weekday: "short", month: "short", day: "numeric" }))}</span>` : "");
     $("#health-list").innerHTML = areaHealth().map((h, i) => `<li class="hrow reveal" style="--d:${i * 50}ms">
         <h3>${esc(h.name)}</h3>
-        <span class="pill ${h.status}">${{ on: "On track", risk: "At risk", off: "Behind", done: "Done" }[h.status]}</span>
+        <span class="pill ${h.status}">${{ on: "On track", blocked: "Blocked", done: "Done" }[h.status]}</span>
         <p>${esc(h.line)}</p>
       </li>`).join("");
 
