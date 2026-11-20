@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0E2A31">
+  <title>silmun · launch board</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230E2A31'/%3E%3Cpath d='M21 10.5c-1.3-1.6-3.1-2.5-5.2-2.5-3 0-5.3 1.8-5.3 4.3 0 5.6 10.8 3.3 10.8 8.6 0 2.4-2.4 4.1-5.5 4.1-2.3 0-4.3-1-5.8-2.8' fill='none' stroke='%2319C6B4' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+</head>
+<body>
+
+  <!-- Lock screen -->
+  <main id="gate" class="gate">
+    <div class="gate-inner">
+      <p class="wordmark">silmun</p>
+      <h1 class="gate-title">Launch <span class="hlw">board</span></h1>
+      <p class="gate-sub">Private. Enter the team password to see where launch stands.</p>
+      <form id="gate-form" class="gate-form" autocomplete="on">
+        <label class="sr-only" for="pw">Password</label>
+        <input id="pw" name="password" type="password" placeholder="Password" autocomplete="current-password" required>
+        <label class="remember"><input id="remember" type="checkbox"> Keep me signed in on this device</label>
+        <button type="submit" class="btn-primary" id="unlock">Unlock</button>
+        <p id="gate-error" class="gate-error" role="alert" hidden></p>
+      </form>
+    </div>
+  </main>
+
+  <!-- Dashboard -->
+  <div id="app" class="app" hidden>
+    <header class="topbar">
+      <p class="wordmark">silmun</p>
+      <p class="updated mono" id="updated"></p>
+      <button class="lock-btn" id="lock" type="button" aria-label="Lock dashboard">Lock</button>
+    </header>
+
+    <section id="overview" class="hero" aria-labelledby="hero-label">
+      <div class="hero-inner">
+        <p class="eyebrow mono" id="hero-label">Launch <span id="launch-flag" class="flag">proposed</span></p>
+        <p class="countdown"><span id="days" class="days">0</span><span class="days-unit">days</span></p>
+        <p class="hero-date" id="launch-date"></p>
+        <div class="progress" aria-hidden="true"><span id="progress-bar"></span></div>
+        <p class="progress-label mono" id="progress-label"></p>
+      </div>
+
+      <div class="viewas" role="group" aria-label="View as">
+        <p class="viewas-label mono">View as</p>
+        <div class="chips" id="viewas"></div>
+      </div>
+    </section>
+
+    <section class="stats" aria-label="At a glance">
+      <button class="stat" data-jump="late"><span class="stat-n" id="n-late">0</span><span class="stat-l">Late</span></button>
+      <button class="stat" data-jump="week"><span class="stat-n" id="n-week">0</span><span class="stat-l">Due this week</span></button>
+      <button class="stat" data-jump="decide"><span class="stat-n" id="n-decide">0</span><span class="stat-l">Need a decision</span></button>
+      <button class="stat" data-jump="blocked"><span class="stat-n" id="n-blocked">0</span><span class="stat-l">Stuck</span></button>
+    </section>
+
+    <section id="decide" class="block" aria-labelledby="decide-h">
+      <header class="block-head">
+        <span class="num mono">01</span>
+        <h2 id="decide-h">Waiting on a <span class="hlw">decision</span></h2>
+      </header>
+      <ol class="decisions" id="decision-list"></ol>
+    </section>
+
+    <section id="path" class="block" aria-labelledby="path-h">
+      <header class="block-head">
+        <span class="num mono">02</span>
+        <h2 id="path-h">Road to <span class="hlw">launch</span></h2>
+      </header>
+      <ol class="path" id="milestones"></ol>
+    </section>
+
+    <section id="tasks" class="block" aria-labelledby="tasks-h">
+      <header class="block-head">
+        <span class="num mono">03</span>
+        <h2 id="tasks-h">The <span class="hlw">work</span></h2>
+      </header>
+      <div class="filters">
+        <div class="segmented" role="tablist" aria-label="Filter tasks" id="task-filter">
+          <button role="tab" data-f="open" aria-selected="true">Open</button>
+          <button role="tab" data-f="late">Late</button>
+          <button role="tab" data-f="week">This week</button>
+          <button role="tab" data-f="stuck">Stuck</button>
+          <button role="tab" data-f="done">Done</button>
+        </div>
+        <div class="chips chips-scroll" id="areas" aria-label="Filter by area"></div>
+      </div>
+      <ul class="tasks" id="task-list"></ul>
+      <p class="empty" id="task-empty" hidden>Nothing here. Nice.</p>
+    </section>
+
+    <section id="risks" class="block block-dark" aria-labelledby="risks-h">
+      <header class="block-head">
+        <span class="num mono">04</span>
+        <h2 id="risks-h">What could <span class="hlw">slip</span></h2>
+      </header>
+      <ul class="risks" id="risk-list"></ul>
+    </section>
+
+    <section id="decided" class="block" aria-labelledby="decided-h">
+      <details class="log">
+        <summary>
+          <span class="num mono">05</span>
+          <span class="log-title" id="decided-h">Already decided</span>
+          <span class="log-count mono" id="made-count"></span>
+        </summary>
+        <ul class="made" id="made-list"></ul>
+      </details>
+    </section>
+
+    <footer class="foot mono">Read-only view of the Silmun launch tracker. Updates daily at 5pm Pacific.</footer>
+
+    <nav class="tabbar" aria-label="Sections">
+      <a href="#overview" data-tab="overview">Overview</a>
+      <a href="#decide" data-tab="decide">Decide</a>
+      <a href="#tasks" data-tab="tasks">Work</a>
+      <a href="#risks" data-tab="risks">Risks</a>
+    </nav>
+  </div>
+
+  <script src="js/app.js" defer></script>
+</body>
+</html>

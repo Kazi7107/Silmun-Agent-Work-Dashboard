@@ -1,0 +1,5 @@
+raw*.json
+*.raw.json
+password*
+.env
+__pycache__/
