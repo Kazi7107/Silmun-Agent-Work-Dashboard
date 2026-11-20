@@ -13,7 +13,7 @@
   const OUTSIDE = ["servicenow"];
   const VIEWS = [
     { id: "all", label: "Everyone", test: null },
-    { id: "leads", label: "Furqan & Zeeshan", test: (o) => LEADS.some((m) => o.includes(m)) },
+    { id: "leads", label: "CEO", test: (o) => LEADS.some((m) => o.includes(m)) },
     {
       id: "kazim", label: "Kazim & team", test: (o) => {
         const people = o.split(/,|&| and /).map((s) => s.trim()).filter(Boolean);
@@ -274,12 +274,65 @@
 
   // Team blockers: anything late or stuck that isn't on the leads themselves
   // and isn't Kazim's own learning or PM admin.
-  function blockers() {
-    const tasks = state.data.tasks.filter((t) => !isDone(t.status) && !leadsOwn(t.owner) && !["Kazim dev", "PM"].includes(t.area) && (isLate(t) || stuckNow(t)));
-    const ms = (state.data.milestones || []).filter((m) => !isDone(m.status) && m.date && diff(m.date) < 0)
-      .map((m) => ({ title: m.title, owner: m.owner, due: m.date, status: m.status, notes: m.notes, milestone: true }));
-    return [...ms, ...tasks].sort((a, b) => (isLateItem(b) - isLateItem(a)) || byDue(a, b));
+  // Accountability: who owes what. Late items sit with their owner. Stuck items sit with
+  // whoever they're waiting on (a teammate named in the note, or the CEO's own decisions).
+  const TEAM = ["Shaheer", "Shahzain", "Tauseeq", "Haris", "Awais", "Nasir", "Kazim"];
+  const CEO = "You (CEO decisions)";
+  function waitingOn(t) {
+    const n = t.notes || "";
+    if (/store approval|servicenow('s)? review/i.test(n)) return { who: null }; // not chaseable
+    const m = n.match(/(waiting on|blocked until|after|from|needs)\b[^.]*/i);
+    if (m) {
+      const hit = TEAM.find((name) => new RegExp(`\\b${name}`, "i").test(m[0]));
+      if (hit) return { who: hit };
+      if (/support email|domain|pricing|price|leads/i.test(m[0])) return { who: CEO };
+      // "waiting on the demo videos" -> whoever owns the open task about demo videos
+      const STOP = ["waiting", "blocked", "until", "after", "needs", "their", "which", "comes", "come", "from", "there"];
+      const words = (m[0].toLowerCase().match(/[a-z]{5,}/g) || []).filter((w) => !STOP.includes(w));
+      const dep = state.data.tasks.find((o) => o !== t && !isDone(o.status) && words.some((w) => o.title.toLowerCase().includes(w)));
+      if (dep) return { who: (dep.owner || "Unassigned").split(/,| and |&/)[0].trim(), dep };
+    }
+    return { who: (t.owner || "Unassigned").split(/,| and |&/)[0].trim() };
   }
+  function blockers() {
+    const pool = state.data.tasks.filter((t) => !isDone(t.status) && !leadsOwn(t.owner) && !["Kazim dev", "PM"].includes(t.area));
+    const late = pool.filter(isLate);
+    const stuck = pool.filter((t) => !isLate(t) && stuckNow(t));
+    const groups = new Map();
+    const group = (who) => { if (!groups.has(who)) groups.set(who, { who, items: [] }); return groups.get(who); };
+    late.forEach((t) => group((t.owner || "Unassigned").split(/,| and |&/)[0].trim()).items.push({ ...t, kind: "late", holding: [] }));
+    stuck.forEach((t) => {
+      const { who, dep } = waitingOn(t);
+      if (!who) return;
+      const g = group(who);
+      if (dep) {
+        // Show what this person owes, and what it's holding up.
+        let item = g.items.find((i) => i.title === dep.title);
+        if (!item) { item = { ...dep, kind: isLate(dep) ? "late" : "owes", holding: [] }; g.items.push(item); }
+        item.holding.push(t.title);
+        return;
+      }
+      if (who === CEO) {
+        // Name the CEO's own open decisions this is waiting on.
+        const n = (t.notes || "").toLowerCase();
+        const keys = ["support email", "domain", "pric"].filter((k) => n.includes(k));
+        const asks = leadItems().filter((d) => keys.some((k) => d.title.toLowerCase().includes(k))).map((d) => d.title.split(/[:.]/)[0].replace(/ needed to sign up.*$/i, "").trim());
+        const title = asks.length ? asks.join(" + ") : t.title;
+        let item = g.items.find((i) => i.title === title);
+        if (!item) { item = { title, kind: "waiting", holding: [] }; g.items.push(item); }
+        if (asks.length) item.holding.push(t.title);
+        return;
+      }
+      const owed = g.items.find((i) => i.kind === "late");
+      if (owed) owed.holding.push(t.title);
+      else g.items.push({ ...t, kind: "waiting", holding: [] });
+    });
+    (state.data.milestones || []).filter((m) => !isDone(m.status) && m.date && diff(m.date) < 0)
+      .forEach((m) => group((m.owner || "Team").split(/,| and |&/)[0].trim()).items.push({ title: m.title, due: m.date, kind: "late", milestone: true, holding: [] }));
+    return [...groups.values()].filter((g) => g.items.length)
+      .sort((a, b) => maxLate(b) - maxLate(a) || b.items.length - a.items.length);
+  }
+  const maxLate = (g) => Math.max(0, ...g.items.filter((i) => i.kind === "late").map((i) => daysLate(i.due)));
   const isLateItem = (t) => (t.due && diff(t.due) < 0 ? 1 : 0);
 
   function areaHealth() {
@@ -304,9 +357,9 @@
   function overall() {
     const ms = state.data.milestones || [];
     const missed = ms.filter((m) => !isDone(m.status) && m.date && diff(m.date) < 0);
-    const b = blockers();
-    const late = b.filter((x) => isLateItem(x)).length;
-    const stuck = b.length - late;
+    const items = blockers().flatMap((g) => g.items);
+    const late = items.filter((x) => x.kind === "late").length;
+    const stuck = items.length - late;
     const overdueAsks = leadItems().filter((d) => d.date && diff(d.date) < 0).length;
     const next = ms.filter((m) => !isDone(m.status)).sort((x, y) => (x.date || "9").localeCompare(y.date || "9"))[0];
     if (missed.length) return { cls: "off", label: "Behind", text: `${missed.length} milestone${missed.length > 1 ? "s" : ""} missed. The launch date needs a second look.` };
@@ -328,7 +381,6 @@
     $("#x-status").textContent = o.label;
     $("#x-needs").textContent = leadItems().length;
     const b = blockers();
-    $("#x-blockers").textContent = b.length;
     const ms = state.data.milestones || [];
     $("#x-ms").textContent = `${ms.filter((m) => isDone(m.status)).length}/${ms.length}`;
 
@@ -339,22 +391,29 @@
         <p>${esc(h.line)}</p>
       </li>`).join("");
 
-    $("#blocker-list").innerHTML = b.length ? b.map((t, i) => {
-      const late = isLateItem(t);
-      const why = late ? `${daysLate(t.due)} day${daysLate(t.due) > 1 ? "s" : ""} late` : (t.status || "").toLowerCase();
-      return `<li class="blk reveal ${late ? "late" : ""}" style="--d:${i * 50}ms">
-        <div class="blk-top"><span>${esc(t.owner || "")}${t.milestone ? " · milestone" : ""}</span><span class="why">${esc(why)}</span></div>
-        <h3>${esc(t.title)}</h3>
-        ${!late && t.notes ? `<p>${esc(firstSentence(t.notes))}</p>` : ""}
+    $("#blocker-list").innerHTML = b.length ? b.map((g, i) => {
+      const lateN = g.items.filter((x) => x.kind === "late").length;
+      const head = lateN ? `${lateN} overdue${maxLate(g) ? ` · up to ${maxLate(g)} day${maxLate(g) > 1 ? "s" : ""} late` : ""}` : "holding things up";
+      return `<li class="owe reveal ${lateN ? "late" : ""}" style="--d:${i * 60}ms">
+        <div class="owe-head"><h3>${esc(g.who)}</h3><span class="why">${esc(head)}</span></div>
+        <ul>${g.items.map((t) => {
+          const tag = t.kind === "late" ? `${daysLate(t.due)} day${daysLate(t.due) > 1 ? "s" : ""} late`
+            : t.kind === "owes" ? `due ${fmt(t.due, { month: "short", day: "numeric" })}`
+            : g.who === CEO ? "needs your call" : (t.owner || "").includes(g.who) ? "stuck" : "others waiting on this";
+          return `<li><span class="owe-tag ${t.kind}">${esc(tag)}</span><span class="owe-what">${esc(t.title)}${t.kind === "waiting" && g.who !== CEO && !(t.owner || "").includes(g.who) ? ` <small>(${esc(t.owner)} is waiting)</small>` : ""}</span>
+            ${t.holding.length ? `<span class="owe-hold">Holding up: ${esc(t.holding.join("; "))}</span>` : ""}</li>`;
+        }).join("")}</ul>
       </li>`;
-    }).join("") : `<li class="allclear">Nothing blocking the team right now.</li>`;
+    }).join("") : `<li class="allclear">Nobody's late on anything. Nothing to chase.</li>`;
+    const owed = b.reduce((n, g) => n + g.items.length, 0);
+    $("#x-blockers").textContent = owed;
   }
 
   /* ---------- Layout per view ---------- */
   const TEAM_ORDER = ["#overview", ".stats-team", "#decide", "#path", "#tasks", "#risks", "#decided"];
   const EXEC_ORDER = ["#overview", ".stats-exec", "#health", "#blockers", "#decide", "#path", "#risks", "#decided"];
   const TEAM_TABS = [["overview", "Overview"], ["decide", "Decide"], ["tasks", "Work"], ["risks", "Risks"]];
-  const EXEC_TABS = [["overview", "Overview"], ["health", "On track?"], ["blockers", "Blockers"], ["decide", "Needs you"]];
+  const EXEC_TABS = [["overview", "Overview"], ["health", "On track?"], ["blockers", "Chase"], ["decide", "Needs you"]];
 
   function layout() {
     const exec = isExec();

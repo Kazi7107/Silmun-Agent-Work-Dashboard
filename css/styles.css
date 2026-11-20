@@ -370,6 +370,21 @@ body.exec .stats-team, body.exec #tasks, body.exec .team-only { display: none; }
 .blk p { margin: 0; font-size: 14px; color: var(--ink-2); }
 .allclear { background: var(--done-soft); color: var(--done); border-radius: var(--r-sm); padding: 16px; font-weight: 500; }
 
+.owe { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--wait); border-radius: var(--r-sm); padding: 14px 16px; }
+.owe.late { border-left-color: var(--late); }
+.owe-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.owe-head h3 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+.owe-head .why { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--wait); text-align: right; }
+.owe.late .owe-head .why { color: var(--late); }
+.owe ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.owe ul > li { display: grid; gap: 3px; padding-top: 10px; border-top: 1px solid var(--line); }
+.owe ul > li:first-child { border-top: 0; padding-top: 0; }
+.owe-tag { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--wait); }
+.owe-tag.late { color: var(--late); }
+.owe-what { font-size: 15px; font-weight: 500; line-height: 1.35; }
+.owe-what small { font-weight: 400; color: var(--ink-3); font-size: 13px; }
+.owe-hold { font-size: 13px; color: var(--ink-3); }
+
 /* ---------- Tab bar (thumb zone) ---------- */
 .tabbar {
   position: fixed; left: 12px; right: 12px; bottom: calc(10px + var(--safe-b)); z-index: 30;
