@@ -260,7 +260,7 @@
   }
 
   /* ---------- Leads view: health and blockers ---------- */
-  const AREA_NAMES = { Agents: "Security agent", Store: "Store submission", Website: "Website", Support: "Support desk", "Next modules": "Next modules" };
+  const AREA_NAMES = { Agents: "Security agent", Store: "Store submission", Website: "Website", Support: "Ticketing system", "Next modules": "Next modules" };
   const daysLate = (s) => -diff(s);
   // Stuck only matters to the leads if it's due soon; something waiting by design months out isn't a blocker yet.
   const stuckNow = (t) => isStuck(t) && (!t.due || diff(t.due) <= 21);
