@@ -263,7 +263,13 @@
   const AREA_NAMES = { Agents: "Security agent", Store: "Store submission", Website: "Website", Support: "Ticketing system", "Next modules": "Next modules" };
   const daysLate = (s) => -diff(s);
   // Stuck only matters to the leads if it's due soon; something waiting by design months out isn't a blocker yet.
-  const stuckNow = (t) => isStuck(t) && (!t.due || diff(t.due) <= 21);
+  // Launch-day tasks (due on or after launch) are waiting by design, not blockers.
+  const stuckNow = (t) => {
+    if (!isStuck(t)) return false;
+    const launch = state.data.launch && state.data.launch.date;
+    if (t.due && launch && t.due >= launch) return false;
+    return !t.due || diff(t.due) <= 21;
+  };
   const firstSentence = (s) => (s || "").split(/(?<=[.!?])\s/)[0];
 
   // Team blockers: anything late or stuck that isn't on the leads themselves
