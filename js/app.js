@@ -177,9 +177,9 @@
     const list = source.sort((a, b) => (a.date || "9").localeCompare(b.date || "9"));
     $("#decision-list").innerHTML = list.length ? list.map((d, i) => {
       const r = rel(d.date);
-      const label = r.cls === "late" ? r.text : d.date ? `by ${fmt(d.date, { month: "short", day: "numeric" })}` : "no date";
+      const label = r.cls === "late" ? r.text.replace("late", "overdue") : d.date ? `due ${fmt(d.date, { weekday: "short", month: "short", day: "numeric" })}` : "no date";
       return `<li class="dcard reveal" style="--d:${i * 60}ms">
-        <div class="dcard-top"><span class="who">${esc(d.who || "")}</span><span class="due ${r.cls}">${esc(label)}</span></div>
+        <div class="dcard-top"><span class="who">${isExec() && leadsOwn(d.who) ? "" : esc(d.who || "")}</span><span class="due ${r.cls}">${esc(label)}</span></div>
         <h3>${esc(d.title)}</h3>
         ${d.notes ? `<p>${esc(d.notes)}</p>` : ""}
       </li>`;
@@ -266,6 +266,7 @@
   // Launch-day tasks (due on or after launch) are waiting by design, not blockers.
   const stuckNow = (t) => {
     if (!isStuck(t)) return false;
+    if (/store approval|servicenow('s)? review/i.test(t.notes || "")) return false; // waiting on ServiceNow, not the team
     const launch = state.data.launch && state.data.launch.date;
     if (t.due && launch && t.due >= launch) return false;
     return !t.due || diff(t.due) <= 21;
@@ -316,7 +317,7 @@
         // Name the CEO's own open decisions this is waiting on.
         const n = (t.notes || "").toLowerCase();
         const keys = ["support email", "domain", "pric"].filter((k) => n.includes(k));
-        const asks = leadItems().filter((d) => keys.some((k) => d.title.toLowerCase().includes(k))).map((d) => d.title.split(/[:.]/)[0].replace(/ needed to sign up.*$/i, "").trim());
+        const asks = leadItems().filter((d) => keys.some((k) => d.title.toLowerCase().includes(k))).map((d) => d.title.replace(/\s*\(.*?\)/g, "").split(/[:.]/)[0].trim());
         const title = asks.length ? asks.join(" + ") : t.title;
         let item = g.items.find((i) => i.title === title);
         if (!item) { item = { title, kind: "waiting", holding: [] }; g.items.push(item); }
@@ -362,15 +363,15 @@
     const stuck = items.length - late;
     const overdueAsks = leadItems().filter((d) => d.date && diff(d.date) < 0).length;
     const next = ms.filter((m) => !isDone(m.status)).sort((x, y) => (x.date || "9").localeCompare(y.date || "9"))[0];
-    if (missed.length) return { cls: "off", label: "Behind", text: `${missed.length} milestone${missed.length > 1 ? "s" : ""} missed. The launch date needs a second look.` };
+    if (missed.length) return { cls: "off", label: "Behind", text: `${missed.length} milestone${missed.length > 1 ? "s" : ""} missed. The launch date needs a second look.`, next };
     if (late || stuck || overdueAsks) {
       const parts = [];
-      if (late) parts.push(`${late} late`);
-      if (stuck) parts.push(`${stuck} stuck`);
-      if (overdueAsks) parts.push(`${overdueAsks} of your decisions overdue`);
-      return { cls: "risk", label: "At risk", text: `${parts.join(", ")}. No milestone missed yet${next ? `; next up is "${next.title}" on ${fmt(next.date, { month: "short", day: "numeric" })}` : ""}.` };
+      if (late) parts.push(`${late} ${late === 1 ? "thing is" : "things are"} late`);
+      if (stuck) parts.push(`${stuck} ${stuck === 1 ? "is" : "are"} stuck`);
+      if (overdueAsks) parts.push(`${overdueAsks} of your decisions ${overdueAsks === 1 ? "is" : "are"} overdue`);
+      return { cls: "risk", label: "At risk", text: `${parts.join(", ").replace(/, ([^,]*)$/, " and $1")}. No milestone has slipped yet.`, next };
     }
-    return { cls: "on", label: "On track", text: "Nothing late, nothing stuck. Every milestone is on schedule." };
+    return { cls: "on", label: "On track", text: "Nothing late, nothing stuck. Every milestone is on schedule.", next };
   }
 
   function renderExec() {
@@ -384,7 +385,8 @@
     const ms = state.data.milestones || [];
     $("#x-ms").textContent = `${ms.filter((m) => isDone(m.status)).length}/${ms.length}`;
 
-    $("#health-summary").innerHTML = `<strong>${esc(o.label)}.</strong> ${esc(o.text)}`;
+    $("#health-summary").innerHTML = `<strong>${esc(o.label)}.</strong> ${esc(o.text)}` +
+      (o.next ? `<span class="next-up"><span class="mono">Next milestone</span>${esc(o.next.title)} · ${esc(fmt(o.next.date, { weekday: "short", month: "short", day: "numeric" }))}</span>` : "");
     $("#health-list").innerHTML = areaHealth().map((h, i) => `<li class="hrow reveal" style="--d:${i * 50}ms">
         <h3>${esc(h.name)}</h3>
         <span class="pill ${h.status}">${{ on: "On track", risk: "At risk", off: "Behind", done: "Done" }[h.status]}</span>
@@ -393,7 +395,7 @@
 
     $("#blocker-list").innerHTML = b.length ? b.map((g, i) => {
       const lateN = g.items.filter((x) => x.kind === "late").length;
-      const head = lateN ? `${lateN} overdue${maxLate(g) ? ` · up to ${maxLate(g)} day${maxLate(g) > 1 ? "s" : ""} late` : ""}` : "holding things up";
+      const head = g.items.length > 1 ? `${g.items.length} items` : "";
       return `<li class="owe reveal ${lateN ? "late" : ""}" style="--d:${i * 60}ms">
         <div class="owe-head"><h3>${esc(g.who)}</h3><span class="why">${esc(head)}</span></div>
         <ul>${g.items.map((t) => {
@@ -405,8 +407,7 @@
         }).join("")}</ul>
       </li>`;
     }).join("") : `<li class="allclear">Nobody's late on anything. Nothing to chase.</li>`;
-    const owed = b.reduce((n, g) => n + g.items.length, 0);
-    $("#x-blockers").textContent = owed;
+    $("#x-blockers").textContent = b.length;
   }
 
   /* ---------- Layout per view ---------- */
@@ -425,6 +426,13 @@
       const sec = el.closest("section");
       if (sec && getComputedStyle(sec).display !== "none") el.textContent = String(++n).padStart(2, "0");
     });
+    const SUBS = exec ? {
+      blockers: "Who owes something, how late it is, and what it's holding up.",
+      decide: "Your open decisions, soonest first.",
+      path: "Where we're headed. The highlighted step is next.",
+      risks: "High-impact things that could push the launch.",
+    } : { blockers: "", decide: "", path: "", risks: "" };
+    Object.entries(SUBS).forEach(([k, v]) => { const el = $(`#sub-${k}`); if (el) { el.textContent = v; el.hidden = !v; } });
     $("#risks-h").innerHTML = exec ? 'Biggest <span class="hlw">risks</span>' : 'What could <span class="hlw">slip</span>';
     $(".tabbar").innerHTML = (exec ? EXEC_TABS : TEAM_TABS).map(([id, label]) => `<a href="#${id}" data-tab="${id}">${label}</a>`).join("");
     $(".tabbar a").classList.add("active");

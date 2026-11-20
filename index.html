@@ -62,8 +62,8 @@
 
     <section class="stats stats-exec" aria-label="At a glance">
       <div class="stat stat-status"><span class="stat-n" id="x-status">On track</span><span class="stat-l">Launch status</span></div>
-      <button class="stat" data-jump="decide"><span class="stat-n" id="x-needs">0</span><span class="stat-l">Need from you</span></button>
-      <button class="stat" data-jump="blockers"><span class="stat-n" id="x-blockers">0</span><span class="stat-l">Things to chase</span></button>
+      <button class="stat" data-jump="decide"><span class="stat-n" id="x-needs">0</span><span class="stat-l">Decisions waiting on you</span></button>
+      <button class="stat" data-jump="blockers"><span class="stat-n" id="x-blockers">0</span><span class="stat-l">People to chase</span></button>
       <button class="stat" data-jump="path"><span class="stat-n" id="x-ms">0/0</span><span class="stat-l">Milestones done</span></button>
     </section>
 
@@ -81,6 +81,7 @@
         <span class="num mono"></span>
         <h2 id="blockers-h">Who to <span class="hlw">chase</span></h2>
       </header>
+      <p class="sub" id="sub-blockers"></p>
       <ul class="blockers" id="blocker-list"></ul>
     </section>
 
@@ -89,6 +90,7 @@
         <span class="num mono"></span>
         <h2 id="decide-h">Waiting on a <span class="hlw">decision</span></h2>
       </header>
+      <p class="sub" id="sub-decide"></p>
       <ol class="decisions" id="decision-list"></ol>
     </section>
 
@@ -97,6 +99,7 @@
         <span class="num mono"></span>
         <h2 id="path-h">Road to <span class="hlw">launch</span></h2>
       </header>
+      <p class="sub" id="sub-path"></p>
       <ol class="path" id="milestones"></ol>
     </section>
 
@@ -124,6 +127,7 @@
         <span class="num mono"></span>
         <h2 id="risks-h">What could <span class="hlw">slip</span></h2>
       </header>
+      <p class="sub" id="sub-risks"></p>
       <ul class="risks" id="risk-list"></ul>
     </section>
 
