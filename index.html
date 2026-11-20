@@ -53,16 +53,40 @@
       </div>
     </section>
 
-    <section class="stats" aria-label="At a glance">
+    <section class="stats stats-team" aria-label="At a glance">
       <button class="stat" data-jump="late"><span class="stat-n" id="n-late">0</span><span class="stat-l">Late</span></button>
       <button class="stat" data-jump="week"><span class="stat-n" id="n-week">0</span><span class="stat-l">Due this week</span></button>
       <button class="stat" data-jump="decide"><span class="stat-n" id="n-decide">0</span><span class="stat-l">Need a decision</span></button>
       <button class="stat" data-jump="blocked"><span class="stat-n" id="n-blocked">0</span><span class="stat-l">Stuck</span></button>
     </section>
 
+    <section class="stats stats-exec" aria-label="At a glance">
+      <div class="stat stat-status"><span class="stat-n" id="x-status">On track</span><span class="stat-l">Launch status</span></div>
+      <button class="stat" data-jump="decide"><span class="stat-n" id="x-needs">0</span><span class="stat-l">Need from you</span></button>
+      <button class="stat" data-jump="blockers"><span class="stat-n" id="x-blockers">0</span><span class="stat-l">Team blockers</span></button>
+      <button class="stat" data-jump="path"><span class="stat-n" id="x-ms">0/0</span><span class="stat-l">Milestones done</span></button>
+    </section>
+
+    <section id="health" class="block exec-only" aria-labelledby="health-h">
+      <header class="block-head">
+        <span class="num mono"></span>
+        <h2 id="health-h">Is it on <span class="hlw">track</span>?</h2>
+      </header>
+      <p class="lede" id="health-summary"></p>
+      <ul class="health" id="health-list"></ul>
+    </section>
+
+    <section id="blockers" class="block exec-only" aria-labelledby="blockers-h">
+      <header class="block-head">
+        <span class="num mono"></span>
+        <h2 id="blockers-h">What's slowing the <span class="hlw">team</span></h2>
+      </header>
+      <ul class="blockers" id="blocker-list"></ul>
+    </section>
+
     <section id="decide" class="block" aria-labelledby="decide-h">
       <header class="block-head">
-        <span class="num mono">01</span>
+        <span class="num mono"></span>
         <h2 id="decide-h">Waiting on a <span class="hlw">decision</span></h2>
       </header>
       <ol class="decisions" id="decision-list"></ol>
@@ -70,7 +94,7 @@
 
     <section id="path" class="block" aria-labelledby="path-h">
       <header class="block-head">
-        <span class="num mono">02</span>
+        <span class="num mono"></span>
         <h2 id="path-h">Road to <span class="hlw">launch</span></h2>
       </header>
       <ol class="path" id="milestones"></ol>
@@ -78,7 +102,7 @@
 
     <section id="tasks" class="block" aria-labelledby="tasks-h">
       <header class="block-head">
-        <span class="num mono">03</span>
+        <span class="num mono"></span>
         <h2 id="tasks-h">The <span class="hlw">work</span></h2>
       </header>
       <div class="filters">
@@ -97,7 +121,7 @@
 
     <section id="risks" class="block block-dark" aria-labelledby="risks-h">
       <header class="block-head">
-        <span class="num mono">04</span>
+        <span class="num mono"></span>
         <h2 id="risks-h">What could <span class="hlw">slip</span></h2>
       </header>
       <ul class="risks" id="risk-list"></ul>
@@ -106,7 +130,7 @@
     <section id="decided" class="block" aria-labelledby="decided-h">
       <details class="log">
         <summary>
-          <span class="num mono">05</span>
+          <span class="num mono"></span>
           <span class="log-title" id="decided-h">Already decided</span>
           <span class="log-count mono" id="made-count"></span>
         </summary>

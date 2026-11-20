@@ -159,8 +159,22 @@
     $('[data-jump="late"]').classList.toggle("hot", late > 0);
   }
 
+  const isExec = () => state.view === "leads";
+  const leadsOwn = (o) => LEADS.some((m) => (o || "").toLowerCase().includes(m));
+
+  // What the leads need to act on: their open decisions plus any open task on them.
+  function leadItems() {
+    const decisions = state.data.decisions.open.filter((d) => leadsOwn(d.who));
+    const tasks = state.data.tasks.filter((t) => leadsOwn(t.owner) && !isDone(t.status))
+      .map((t) => ({ title: t.title, who: t.owner, date: t.due, notes: t.notes }));
+    const seen = new Set(decisions.map((d) => d.title.toLowerCase()));
+    return [...decisions, ...tasks.filter((t) => !seen.has(t.title.toLowerCase()))];
+  }
+
   function renderDecisions() {
-    const list = state.data.decisions.open.filter((d) => mine(d.who)).sort((a, b) => (a.date || "9").localeCompare(b.date || "9"));
+    $("#decide-h").innerHTML = isExec() ? 'What we need from <span class="hlw">you</span>' : 'Waiting on a <span class="hlw">decision</span>';
+    const source = isExec() ? leadItems() : state.data.decisions.open.filter((d) => mine(d.who));
+    const list = source.sort((a, b) => (a.date || "9").localeCompare(b.date || "9"));
     $("#decision-list").innerHTML = list.length ? list.map((d, i) => {
       const r = rel(d.date);
       const label = r.cls === "late" ? r.text : d.date ? `by ${fmt(d.date, { month: "short", day: "numeric" })}` : "no date";
@@ -226,7 +240,8 @@
 
   function renderRisks() {
     const order = { high: 0, medium: 1, low: 2 };
-    const list = state.data.risks.filter((r) => mine(r.owner)).sort((a, b) => (order[a.impact.toLowerCase()] ?? 3) - (order[b.impact.toLowerCase()] ?? 3));
+    const pool = isExec() ? state.data.risks.filter((r) => r.impact.toLowerCase() === "high") : state.data.risks.filter((r) => mine(r.owner));
+    const list = pool.sort((a, b) => (order[a.impact.toLowerCase()] ?? 3) - (order[b.impact.toLowerCase()] ?? 3));
     $("#risk-list").innerHTML = list.length ? list.map((r, i) => `<li class="risk reveal" style="--d:${i * 60}ms">
         <div class="risk-top"><span class="impact ${esc(r.impact.toLowerCase())}"><span class="bars"><i></i><i></i><i></i></span>${esc(r.impact)}</span></div>
         <h3>${esc(r.title)}</h3>
@@ -244,7 +259,114 @@
     </li>`).join("");
   }
 
+  /* ---------- Leads view: health and blockers ---------- */
+  const AREA_NAMES = { Agents: "Security agent", Store: "Store submission", Website: "Website", Support: "Support desk", "Next modules": "Next modules" };
+  const daysLate = (s) => -diff(s);
+  // Stuck only matters to the leads if it's due soon; something waiting by design months out isn't a blocker yet.
+  const stuckNow = (t) => isStuck(t) && (!t.due || diff(t.due) <= 21);
+  const firstSentence = (s) => (s || "").split(/(?<=[.!?])\s/)[0];
+
+  // Team blockers: anything late or stuck that isn't on the leads themselves
+  // and isn't Kazim's own learning or PM admin.
+  function blockers() {
+    const tasks = state.data.tasks.filter((t) => !isDone(t.status) && !leadsOwn(t.owner) && !["Kazim dev", "PM"].includes(t.area) && (isLate(t) || stuckNow(t)));
+    const ms = (state.data.milestones || []).filter((m) => !isDone(m.status) && m.date && diff(m.date) < 0)
+      .map((m) => ({ title: m.title, owner: m.owner, due: m.date, status: m.status, notes: m.notes, milestone: true }));
+    return [...ms, ...tasks].sort((a, b) => (isLateItem(b) - isLateItem(a)) || byDue(a, b));
+  }
+  const isLateItem = (t) => (t.due && diff(t.due) < 0 ? 1 : 0);
+
+  function areaHealth() {
+    return Object.entries(AREA_NAMES).map(([area, name]) => {
+      const items = state.data.tasks.filter((t) => t.area === area);
+      if (!items.length) return null;
+      const open = items.filter((t) => !isDone(t.status));
+      const late = open.filter(isLate).length;
+      const stuck = open.filter((t) => stuckNow(t) && !isLate(t)).length;
+      const next = open.filter((t) => t.due && diff(t.due) >= 0).sort(byDue)[0];
+      const status = !open.length ? "done" : late ? "off" : stuck ? "risk" : "on";
+      const bits = [];
+      if (late) bits.push(`${late} late`);
+      if (stuck) bits.push(`${stuck} stuck`);
+      if (!late && !stuck && open.length) bits.push("All on schedule");
+      if (!open.length) bits.push("Finished");
+      if (next) bits.push(`next due ${fmt(next.due, { month: "short", day: "numeric" })}`);
+      return { name, status, line: bits.join(" · ") };
+    }).filter(Boolean);
+  }
+
+  function overall() {
+    const ms = state.data.milestones || [];
+    const missed = ms.filter((m) => !isDone(m.status) && m.date && diff(m.date) < 0);
+    const b = blockers();
+    const late = b.filter((x) => isLateItem(x)).length;
+    const stuck = b.length - late;
+    const overdueAsks = leadItems().filter((d) => d.date && diff(d.date) < 0).length;
+    const next = ms.filter((m) => !isDone(m.status)).sort((x, y) => (x.date || "9").localeCompare(y.date || "9"))[0];
+    if (missed.length) return { cls: "off", label: "Behind", text: `${missed.length} milestone${missed.length > 1 ? "s" : ""} missed. The launch date needs a second look.` };
+    if (late || stuck || overdueAsks) {
+      const parts = [];
+      if (late) parts.push(`${late} late`);
+      if (stuck) parts.push(`${stuck} stuck`);
+      if (overdueAsks) parts.push(`${overdueAsks} of your decisions overdue`);
+      return { cls: "risk", label: "At risk", text: `${parts.join(", ")}. No milestone missed yet${next ? `; next up is "${next.title}" on ${fmt(next.date, { month: "short", day: "numeric" })}` : ""}.` };
+    }
+    return { cls: "on", label: "On track", text: "Nothing late, nothing stuck. Every milestone is on schedule." };
+  }
+
+  function renderExec() {
+    const o = overall();
+    const statusCard = $(".stat-status");
+    statusCard.classList.remove("st-on", "st-risk", "st-off");
+    statusCard.classList.add(`st-${o.cls}`);
+    $("#x-status").textContent = o.label;
+    $("#x-needs").textContent = leadItems().length;
+    const b = blockers();
+    $("#x-blockers").textContent = b.length;
+    const ms = state.data.milestones || [];
+    $("#x-ms").textContent = `${ms.filter((m) => isDone(m.status)).length}/${ms.length}`;
+
+    $("#health-summary").innerHTML = `<strong>${esc(o.label)}.</strong> ${esc(o.text)}`;
+    $("#health-list").innerHTML = areaHealth().map((h, i) => `<li class="hrow reveal" style="--d:${i * 50}ms">
+        <h3>${esc(h.name)}</h3>
+        <span class="pill ${h.status}">${{ on: "On track", risk: "At risk", off: "Behind", done: "Done" }[h.status]}</span>
+        <p>${esc(h.line)}</p>
+      </li>`).join("");
+
+    $("#blocker-list").innerHTML = b.length ? b.map((t, i) => {
+      const late = isLateItem(t);
+      const why = late ? `${daysLate(t.due)} day${daysLate(t.due) > 1 ? "s" : ""} late` : (t.status || "").toLowerCase();
+      return `<li class="blk reveal ${late ? "late" : ""}" style="--d:${i * 50}ms">
+        <div class="blk-top"><span>${esc(t.owner || "")}${t.milestone ? " · milestone" : ""}</span><span class="why">${esc(why)}</span></div>
+        <h3>${esc(t.title)}</h3>
+        ${!late && t.notes ? `<p>${esc(firstSentence(t.notes))}</p>` : ""}
+      </li>`;
+    }).join("") : `<li class="allclear">Nothing blocking the team right now.</li>`;
+  }
+
+  /* ---------- Layout per view ---------- */
+  const TEAM_ORDER = ["#overview", ".stats-team", "#decide", "#path", "#tasks", "#risks", "#decided"];
+  const EXEC_ORDER = ["#overview", ".stats-exec", "#health", "#blockers", "#path", "#decide", "#risks", "#decided"];
+  const TEAM_TABS = [["overview", "Overview"], ["decide", "Decide"], ["tasks", "Work"], ["risks", "Risks"]];
+  const EXEC_TABS = [["overview", "Overview"], ["health", "On track?"], ["blockers", "Blockers"], ["decide", "Needs you"]];
+
+  function layout() {
+    const exec = isExec();
+    document.body.classList.toggle("exec", exec);
+    const app = $("#app"), foot = $(".foot");
+    (exec ? EXEC_ORDER : TEAM_ORDER).forEach((sel) => { const el = $(sel); if (el) app.insertBefore(el, foot); });
+    let n = 0;
+    $$(".num", app).forEach((el) => {
+      const sec = el.closest("section");
+      if (sec && getComputedStyle(sec).display !== "none") el.textContent = String(++n).padStart(2, "0");
+    });
+    $("#risks-h").innerHTML = exec ? 'Biggest <span class="hlw">risks</span>' : 'What could <span class="hlw">slip</span>';
+    $(".tabbar").innerHTML = (exec ? EXEC_TABS : TEAM_TABS).map(([id, label]) => `<a href="#${id}" data-tab="${id}">${label}</a>`).join("");
+    $(".tabbar a").classList.add("active");
+  }
+
   function renderAll() {
+    layout();
     renderHero();
     renderViewAs();
     renderStats();
@@ -254,6 +376,7 @@
     renderTasks();
     renderRisks();
     renderMade();
+    if (isExec()) renderExec();
     observeReveals();
   }
 
@@ -282,15 +405,14 @@
   }
 
   function watchTabs() {
-    const tabs = $$(".tabbar a");
-    const ids = tabs.map((a) => a.dataset.tab);
     const obs = new IntersectionObserver((entries) => {
       entries.forEach((e) => {
-        if (e.isIntersecting) tabs.forEach((a) => a.classList.toggle("active", a.dataset.tab === e.target.id));
+        if (!e.isIntersecting) return;
+        const tabs = $$(".tabbar a");
+        if (tabs.some((a) => a.dataset.tab === e.target.id)) tabs.forEach((a) => a.classList.toggle("active", a.dataset.tab === e.target.id));
       });
     }, { rootMargin: "-40% 0px -55% 0px" });
-    ids.forEach((id) => { const s = document.getElementById(id); if (s) obs.observe(s); });
-    tabs[0].classList.add("active");
+    ["overview", "decide", "health", "blockers", "path", "tasks", "risks"].forEach((id) => { const s = document.getElementById(id); if (s) obs.observe(s); });
   }
 
   /* ---------- Events ---------- */
@@ -305,7 +427,7 @@
       const jump = e.target.closest("[data-jump]");
       if (jump) {
         const j = jump.dataset.jump;
-        if (j === "decide") { $("#decide").scrollIntoView(); return; }
+        if (["decide", "blockers", "path"].includes(j)) { $(`#${j}`).scrollIntoView(); return; }
         state.filter = j === "blocked" ? "stuck" : j;
         state.area = "All";
         renderAreas(); renderTasks();
