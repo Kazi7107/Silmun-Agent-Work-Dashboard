@@ -2,6 +2,7 @@
   "use strict";
 
   const DATA_URL = "data/tracker.enc.json";
+  const KEY_URL = "data/private-key.enc.json";
   const STORE_PW = "silmun-board-pw";
   const STORE_VIEW = "silmun-board-view";
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -38,19 +39,37 @@
   /* ---------- Crypto ---------- */
   const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
-  async function decrypt(payload, password) {
-    const enc = new TextEncoder();
-    const base = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
-    const key = await crypto.subtle.deriveKey(
-      { name: "PBKDF2", salt: b64(payload.salt), iterations: payload.iter, hash: "SHA-256" },
+  // 1. The password unlocks the private key (PBKDF2 + AES-GCM).
+  // 2. The private key + the data's one-time public key give the data key (ECDH + HKDF).
+  // 3. The data key decrypts the data (AES-GCM).
+  async function unlockPrivateKey(wrapped, password) {
+    const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
+    const kek = await crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt: b64(wrapped.salt), iterations: wrapped.iter, hash: "SHA-256" },
       base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]
+    );
+    let pkcs8;
+    try {
+      pkcs8 = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(wrapped.iv) }, kek, b64(wrapped.data));
+    } catch { throw new Error("password"); }
+    return crypto.subtle.importKey("pkcs8", pkcs8, { name: "ECDH", namedCurve: "P-256" }, false, ["deriveBits"]);
+  }
+
+  async function decrypt(payload, privateKey) {
+    const epk = await crypto.subtle.importKey("raw", b64(payload.epk), { name: "ECDH", namedCurve: "P-256" }, false, []);
+    const shared = await crypto.subtle.deriveBits({ name: "ECDH", public: epk }, privateKey, 256);
+    const hk = await crypto.subtle.importKey("raw", shared, "HKDF", false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey(
+      { name: "HKDF", hash: "SHA-256", salt: b64(payload.salt), info: new TextEncoder().encode("silmun-board-v2") },
+      hk, { name: "AES-GCM", length: 256 }, false, ["decrypt"]
     );
     const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(payload.iv) }, key, b64(payload.data));
     return JSON.parse(new TextDecoder().decode(plain));
   }
 
-  async function fetchPayload() {
-    const res = await fetch(`${DATA_URL}?t=${Date.now()}`, { cache: "no-store" });
+  async function fetchJSON(url) {
+    let res;
+    try { res = await fetch(`${url}?t=${Date.now()}`, { cache: "no-store" }); } catch { throw new Error("load"); }
     if (!res.ok) throw new Error("load");
     return res.json();
   }
@@ -298,8 +317,9 @@
 
   /* ---------- Gate ---------- */
   async function open(password, remember) {
-    const payload = await fetchPayload();
-    const data = await decrypt(payload, password);
+    const [wrapped, payload] = await Promise.all([fetchJSON(KEY_URL), fetchJSON(DATA_URL)]);
+    const privateKey = await unlockPrivateKey(wrapped, password);
+    const data = await decrypt(payload, privateKey);
     if (remember) store.set(STORE_PW, password);
     state.data = data;
     $("#gate").hidden = true;

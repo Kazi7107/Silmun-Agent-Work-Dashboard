@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Turn a raw export of the Silmun Launch Tracker into the trimmed public data file.
 
-Usage:
-    SILMUN_DASH_PASSWORD=... python3 scripts/build_public_data.py RAW.json data/tracker.enc.json
+Usage (no password needed, it encrypts to data/public-key.json):
+    python3 scripts/build_public_data.py RAW.json data/tracker.enc.json
 
 RAW.json holds one list of rows per sheet (header row left out):
     {"Timeline": [[...]], "Tasks": [[...]], "Risks": [[...]], "Decisions": [[...]]}
@@ -163,33 +163,37 @@ def raw_note_for(raw, title):
     return None
 
 
-ITERATIONS = 310000
+PUBLIC_KEY = "data/public-key.json"
+HKDF_INFO = b"silmun-board-v2"
 
 
-def encrypt(text, password):
-    """AES-256-GCM, key from PBKDF2-SHA256. The page decrypts it with WebCrypto."""
+def encrypt(text):
+    """Encrypt to the dashboard's public key (ECDH P-256 + HKDF-SHA256 + AES-256-GCM).
+
+    No password needed here: only the password-protected private key can decrypt.
+    """
     import base64
     import os
-    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
+    with open(PUBLIC_KEY) as f:
+        pub = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), base64.b64decode(json.load(f)["key"]))
+    eph = ec.generate_private_key(ec.SECP256R1())
+    shared = eph.exchange(ec.ECDH(), pub)
     salt, iv = os.urandom(16), os.urandom(12)
-    key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt,
-                     iterations=ITERATIONS).derive(password.encode())
+    key = HKDF(algorithm=hashes.SHA256(), length=32, salt=salt, info=HKDF_INFO).derive(shared)
     ct = AESGCM(key).encrypt(iv, text.encode(), None)
     b64 = lambda b: base64.b64encode(b).decode()
-    return {"v": 1, "kdf": "PBKDF2-SHA256", "iter": ITERATIONS,
-            "salt": b64(salt), "iv": b64(iv), "data": b64(ct)}
+    epk = eph.public_key().public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+    return {"v": 2, "epk": b64(epk), "salt": b64(salt), "iv": b64(iv), "data": b64(ct)}
 
 
 def main():
-    import os
     if len(sys.argv) != 3:
         sys.exit(__doc__)
-    password = os.environ.get("SILMUN_DASH_PASSWORD")
-    if not password:
-        sys.exit("Set SILMUN_DASH_PASSWORD. The data is only ever written encrypted.")
     with open(sys.argv[1]) as f:
         raw = json.load(f)
     data = build(raw)
@@ -198,7 +202,7 @@ def main():
     if EMAIL.search(text) or MONEY.search(text):
         sys.exit("Refusing to write: an email address or a price is still in the output.")
     with open(sys.argv[2], "w") as f:
-        json.dump(encrypt(text, password), f)
+        json.dump(encrypt(text), f)
         f.write("\n")
     print(f"Wrote {sys.argv[2]} (encrypted): {len(data['tasks'])} tasks, {len(data['milestones'])} milestones, "
           f"{len(data['risks'])} risks, {len(data['decisions']['open'])} open decisions")

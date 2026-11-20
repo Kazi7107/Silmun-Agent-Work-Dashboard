@@ -6,7 +6,13 @@ A password-protected, mobile-first dashboard for the Silmun launch: days to laun
 
 ## How the password works
 
-GitHub Pages can't do logins, so the data is encrypted instead. `data/tracker.enc.json` is AES-256-GCM encrypted with a key derived from the password (PBKDF2-SHA256, 310k rounds). The page asks for the password and decrypts it in the browser. Without the password the repo only holds scrambled data, even though the repo is public.
+GitHub Pages can't do logins, so the data is encrypted instead, with a lock-and-key setup:
+
+- `data/public-key.json` is the lock. The daily update uses it to encrypt the data. It can't decrypt anything, so the update job never needs the password.
+- `data/private-key.enc.json` is the key, itself encrypted with the password (PBKDF2-SHA256, 600k rounds, AES-GCM).
+- `data/tracker.enc.json` is the data (ECDH P-256 + HKDF + AES-256-GCM).
+
+The page asks for the password, unlocks the key and decrypts the data, all in the browser. Without the password the public repo only holds scrambled data.
 
 "Keep me signed in" saves the password in that browser only. The Lock button clears it.
 
@@ -15,7 +21,7 @@ GitHub Pages can't do logins, so the data is encrypted instead. `data/tracker.en
 The source of truth is the private Silmun Launch Tracker. A daily job (5pm Pacific) exports it and runs:
 
 ```
-SILMUN_DASH_PASSWORD=... python3 scripts/build_public_data.py raw.json data/tracker.enc.json
+python3 scripts/build_public_data.py raw.json data/tracker.enc.json
 ```
 
 The script also trims the data before encrypting it: no email addresses, no prices, no risks about people's personal situations. Any tracker row with `[private]` in it is left out completely.
@@ -24,4 +30,9 @@ Never commit the raw export or the password.
 
 ## Changing the password
 
-Rebuild the data with a new `SILMUN_DASH_PASSWORD` and push. The old password stops working right away. Anyone who ticked "Keep me signed in" gets asked for the new password.
+```
+SILMUN_DASH_PASSWORD=new-password python3 scripts/make_keys.py
+python3 scripts/build_public_data.py raw.json data/tracker.enc.json
+```
+
+Push both. The old password stops working right away.
