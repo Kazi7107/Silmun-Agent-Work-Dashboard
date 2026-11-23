@@ -285,7 +285,13 @@
     const m = n.match(/(waiting on|blocked until|after|from|needs)\b[^.]*/i);
     if (m) {
       const hit = TEAM.find((name) => new RegExp(`\\b${name}`, "i").test(m[0]));
-      if (hit) return { who: hit };
+      if (hit) {
+        // Point at what that person owes, if one of their open tasks matches the note.
+        const STOP1 = ["waiting", "blocked", "until", "after", "needs", "their", "which", "comes", "come", "from", "there", hit.toLowerCase()];
+        const ws = (m[0].toLowerCase().match(/[a-z]{5,}/g) || []).filter((w) => !STOP1.includes(w));
+        const dep = state.data.tasks.find((o) => o !== t && !isDone(o.status) && (o.owner || "").includes(hit) && ws.some((w) => o.title.toLowerCase().includes(w)));
+        return dep ? { who: hit, dep } : { who: hit };
+      }
       if (/support email|domain|pricing|price|leads/i.test(m[0])) return { who: CEO };
       // "waiting on the demo videos" -> whoever owns the open task about demo videos
       const STOP = ["waiting", "blocked", "until", "after", "needs", "their", "which", "comes", "come", "from", "there"];
