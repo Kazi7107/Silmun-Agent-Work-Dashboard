@@ -126,13 +126,25 @@
     const launch = data.launch || {};
     const n = diff(launch.date);
     const daysEl = $("#days");
-    const target = n === null ? 0 : Math.max(n, 0);
-    countUp(daysEl, target);
-    $(".days-unit").textContent = target === 1 ? "day" : "days";
-    $("#launch-date").textContent = launch.date ? `to launch · ${fmt(launch.date, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}` : "Launch date not set";
     const flag = $("#launch-flag");
-    flag.textContent = launch.proposed ? "proposed" : "confirmed";
-    flag.classList.toggle("ok", !launch.proposed);
+    if (n === null) {
+      // No launch date yet: say so instead of showing a fake countdown.
+      daysEl.textContent = "TBD";
+      $(".days-unit").textContent = "";
+      const sub = (data.milestones || []).find((m) => /submitted to the servicenow store/i.test(m.title) && !isDone(m.status));
+      $("#launch-date").textContent = sub && sub.date
+        ? `Launch date gets set once the security agent is submitted (${fmt(sub.date, { weekday: "short", month: "short", day: "numeric" })}) and ServiceNow approves it`
+        : "Launch date not set yet";
+      flag.textContent = "date TBD";
+      flag.classList.remove("ok");
+    } else {
+      const target = Math.max(n, 0);
+      countUp(daysEl, target);
+      $(".days-unit").textContent = target === 1 ? "day" : "days";
+      $("#launch-date").textContent = `to launch · ${fmt(launch.date, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}`;
+      flag.textContent = launch.proposed ? "proposed" : "confirmed";
+      flag.classList.toggle("ok", !launch.proposed);
+    }
 
     const ms = data.milestones || [];
     const done = ms.filter((m) => isDone(m.status)).length;
