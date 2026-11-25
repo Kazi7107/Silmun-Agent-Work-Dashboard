@@ -308,7 +308,7 @@
       // "waiting on the demo videos" -> whoever owns the open task about demo videos
       const STOP = ["waiting", "blocked", "until", "after", "needs", "their", "which", "comes", "come", "from", "there"];
       const words = (m[0].toLowerCase().match(/[a-z]{5,}/g) || []).filter((w) => !STOP.includes(w));
-      const dep = state.data.tasks.find((o) => o !== t && !isDone(o.status) && words.some((w) => o.title.toLowerCase().includes(w)));
+      const dep = state.data.tasks.find((o) => o !== t && !isDone(o.status) && (o.owner || "") !== (t.owner || "") && words.some((w) => o.title.toLowerCase().includes(w)));
       if (dep) return { who: (dep.owner || "Unassigned").split(/,| and |&/)[0].trim(), dep };
     }
     return { who: (t.owner || "Unassigned").split(/,| and |&/)[0].trim() };
