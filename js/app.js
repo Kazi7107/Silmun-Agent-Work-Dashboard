@@ -315,8 +315,10 @@
   }
   function blockers() {
     const pool = state.data.tasks.filter((t) => !isDone(t.status) && !leadsOwn(t.owner) && !["Kazim dev", "PM"].includes(t.area));
-    const late = pool.filter(isLate);
-    const stuck = pool.filter((t) => !isLate(t) && stuckNow(t));
+    // A late task that's blocked on someone else counts against them, not the owner.
+    const blockedByOther = (t) => isStuck(t) && (() => { const w = waitingOn(t).who; return w && !(t.owner || "").includes(w); })();
+    const late = pool.filter((t) => isLate(t) && !blockedByOther(t));
+    const stuck = pool.filter((t) => (!isLate(t) && stuckNow(t)) || (isLate(t) && blockedByOther(t)));
     const groups = new Map();
     const group = (who) => { if (!groups.has(who)) groups.set(who, { who, items: [] }); return groups.get(who); };
     late.forEach((t) => group((t.owner || "Unassigned").split(/,| and |&/)[0].trim()).items.push({ ...t, kind: "late", holding: [] }));
@@ -337,9 +339,14 @@
         const keys = ["support email", "domain", "pric"].filter((k) => n.includes(k));
         const asks = leadItems().filter((d) => keys.some((k) => d.title.toLowerCase().includes(k))).map((d) => d.title.replace(/\s*\(.*?\)/g, "").split(/[:.]/)[0].trim());
         const title = asks.length ? asks.join(" + ") : t.title;
+        const askDates = leadItems().filter((d) => keys.some((k) => d.title.toLowerCase().includes(k)) && d.date).map((d) => d.date).sort();
+        const oldest = askDates[0];
         let item = g.items.find((i) => i.title === title);
-        if (!item) { item = { title, kind: "waiting", holding: [] }; g.items.push(item); }
-        if (asks.length) item.holding.push(t.title);
+        if (!item) {
+          item = oldest && diff(oldest) < 0 ? { title, kind: "late", due: oldest, holding: [] } : { title, kind: "waiting", holding: [] };
+          g.items.push(item);
+        }
+        if (asks.length && !item.holding.includes(t.title)) item.holding.push(t.title);
         return;
       }
       const owed = g.items.find((i) => i.kind === "late");
@@ -362,7 +369,7 @@
       // Who this area is waiting on: owners of late items, plus whoever stuck items wait on.
       const firstName = (o) => (o || "Unassigned").split(/,| and |&/)[0].trim();
       const who = new Set();
-      open.filter(isLate).forEach((t) => who.add(firstName(t.owner)));
+      open.filter(isLate).forEach((t) => { const w = isStuck(t) ? waitingOn(t).who : null; who.add(w || firstName(t.owner)); });
       open.filter((t) => stuckNow(t) && !isLate(t)).forEach((t) => { const w = waitingOn(t).who; if (w) who.add(w); });
       const next = open.filter((t) => t.due && diff(t.due) >= 0).sort(byDue)[0];
       const status = !open.length ? "done" : who.size ? "blocked" : "on";
